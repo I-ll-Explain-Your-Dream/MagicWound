@@ -53,11 +53,55 @@ jobs:
           # compile: add explicit mingw include path so Boost headers are found
           g++ -std=c++17 -Ithird_party/better-enums -I/mingw64/include main.cpp magicwound.cpp resource.o -lws2_32 -mconsole -pthread -o MagicWound.exe
 
-      - name: Upload built exe
+      - name: Create release bundle (exe + runtime DLLs)
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          mkdir -p release_bundle
+          cp -v MagicWound.exe release_bundle/ || true
+
+          # copy common MSYS2/Mingw-w64 runtime DLLs that g++-built executables may need
+          patterns=( 
+            libwinpthread-1.dll
+            libstdc++-6.dll
+            libgcc_s_seh-1.dll
+            libgcc_s_dw2-1.dll
+            libgcc_s_sjlj-1.dll
+            libgomp-1.dll
+          )
+
+          for p in "${patterns[@]}"; do
+            for f in /mingw64/bin/$p; do
+              if [ -f "$f" ]; then
+                echo "copying $f"
+                cp -v "$f" release_bundle/ || true
+              fi
+            done
+          done
+
+          # Also copy any libstdc++ / libgcc_s variants just in case
+          for f in /mingw64/bin/libstdc++-*.dll /mingw64/bin/libgcc_s-*.dll; do
+            if [ -f "$f" ]; then cp -v "$f" release_bundle/ || true; fi
+          done
+
+          # create a zip containing the exe and DLLs
+          if command -v zip >/dev/null 2>&1; then
+            zip -j MagicWound.zip release_bundle/* || true
+          else
+            python - <<PY
+import zipfile,glob,os
+with zipfile.ZipFile('MagicWound.zip','w') as z:
+  for fn in glob.glob('release_bundle/*'):
+    z.write(fn, os.path.basename(fn))
+PY
+          fi
+
+      - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
           name: MagicWound-windows
-          path: MagicWound.exe
+          path: MagicWound.zip
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
@@ -92,12 +136,12 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload release asset
+      - name: Upload release asset (zip)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./out/MagicWound.exe
-          asset_name: MagicWound-${{ steps.read_version.outputs.version }}.exe
-          asset_content_type: application/octet-stream
+          asset_path: ./out/MagicWound.zip
+          asset_name: MagicWound-${{ steps.read_version.outputs.version }}.zip
+          asset_content_type: application/zip
