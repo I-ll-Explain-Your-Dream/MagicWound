@@ -53,11 +53,20 @@ jobs:
           # compile: add explicit mingw include path so Boost headers are found
           g++ -std=c++17 -Ithird_party/better-enums -I/mingw64/include main.cpp magicwound.cpp resource.o -lws2_32 -mconsole -pthread -o MagicWound.exe
 
-      - name: Upload built exe
+          # copy runtime DLLs (libwinpthread and common mingw runtime DLLs) so exe can run on other Windows machines
+          cp /mingw64/bin/libwinpthread-1.dll ./ || true
+          cp /mingw64/bin/libgcc_s_seh-1.dll ./ || true
+          cp /mingw64/bin/libstdc++-6.dll ./ || true
+
+      - name: Upload built exe and runtimes
         uses: actions/upload-artifact@v4
         with:
           name: MagicWound-windows
-          path: MagicWound.exe
+          path: |
+            MagicWound.exe
+            libwinpthread-1.dll
+            libgcc_s_seh-1.dll
+            libstdc++-6.dll
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
