@@ -1,0 +1,43 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 and install packages
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: |
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-boost
+
+      - name: Fetch header-only deps (better-enums)
+        run: |
+          git clone --depth=1 https://github.com/aantron/better-enums.git third_party/better-enums
+        shell: bash
+
+      - name: Build with mingw-w64
+        shell: bash
+        run: |
+          export PATH="/c/msys64/mingw64/bin:$PATH"
+          set -e
+          # build resource object
+          windres resource.rc resource.o || true
+          # adjust include paths below if your project needs other headers
+          g++ -std=c++17 -Ithird_party/better-enums main.cpp magicwound.cpp resource.o -lws2_32 -mconsole -pthread -o MagicWound.exe
+
+      - name: Upload built exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: MagicWound-windows
+          path: MagicWound.exe
