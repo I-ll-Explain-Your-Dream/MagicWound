@@ -1,8 +1,5 @@
 name: Build Windows EXE
 
-permissions:
-  contents: write
-
 on:
   push:
     branches: [ main, master ]
@@ -13,6 +10,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,6 +67,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build-windows
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,27 +83,20 @@ jobs:
         id: read_version
         run: |
           VERSION=$(cat version | tr -d '\r\n')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare release asset
+        run: |
+          mkdir -p release
+          cp ./out/MagicWound.exe "release/MagicWound-${{ steps.read_version.outputs.version }}.exe"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.read_version.outputs.version }}
-          release_name: Release ${{ steps.read_version.outputs.version }}
+          name: Release ${{ steps.read_version.outputs.version }}
           body: Automated build (run ${{ github.run_number }}) - version ${{ steps.read_version.outputs.version }}
           draft: false
           prerelease: false
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./out/MagicWound.exe
-          asset_name: MagicWound-${{ steps.read_version.outputs.version }}.exe
-          asset_content_type: application/octet-stream
+          files: release/MagicWound-*.exe
